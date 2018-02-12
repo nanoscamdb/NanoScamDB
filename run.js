@@ -28,7 +28,7 @@ const getCache = async function () {
   return new Promise(async (resolve, reject) => {
     const exists = await fs.pathExists(cachePath)
 
-    if (!exists) {
+    if (exists) {
       if (!cache) {
         try {
           cache = JSON.parse((await fs.readFile(cachePath)).toString());
