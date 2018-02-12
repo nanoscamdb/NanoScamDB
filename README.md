@@ -1,6 +1,6 @@
-# Ethereum Scam Database
+# Nano Currency Scam Database
 
-*An open-source database to keep track of all the current ethereum scams*
+*An open-source database to keep track of all the current nano (xrb) currency scams*
 
 ## Usage
 
@@ -8,17 +8,34 @@ Make sure you have both [Node.JS](https://nodejs.org/en/download/) and [Git](htt
 
 Then, open a command line anywhere and run the following commands:
 
-> git clone https://github.com/MrLuit/EtherScamDB.git
-
+```bash
+> git clone https://github.com/pocesar/NanoScamDB.git
 > npm install
-
 > node run.js
+```
 
 The command line should now exit, asking you to update the config.js file with correct values. Please use your own API keys. When you're done, launch run.js again:
 
+```bash
 > node run.js
+```
+
+Environment variables should be set for sensitive information:
+
+```json
+{
+	"port": process.env.PORT || 3000,
+	"cache_refreshing_interval": process.env.CACHE_REFRESHING_INTERVAL || 1000 * 60 * 60 * 2,
+	"Google_SafeBrowsing_API_Key": process.env.GOOGLE_SAFEBROWSING_API_KEY,
+	"Github_Hook_Secret": process.env.GITHUB_HOOK_SECRET,
+	"base_url": process.env.BASE_URL,
+	"Recaptcha_Key": process.env.RECAPTCHA_KEY,
+	"Recaptcha_Secret": process.env.RECAPTCHA_SECRET
+}
+```
 
 Generating should take a couple of minutes the first time or after a clean, but when `cache.json` is already present it should launch instantly.
+
 
 ## Flags
 
@@ -35,12 +52,18 @@ Fork this project and edit `_data/data.yaml`. Every item can have the following 
 - **description**: A full description for the scam **(Optional)**
 - **url**: The protocol + hostname for a scam website, without a trailing `/` **(Optional)**
 - **category**: The category under which the item falls **(Optional)**
-- **addresses**: An array of all ethereum addresses that were involved in this scam, with leading '0x'  **(Optional)**
+- **addresses**: An array of all nano (xrb) addresses that were involved in this scam, with leading 'xrb_'  **(Optional)**
 
 ## API
 
-To make use of our database, the following API can be used: https://etherscamdb.info/api/
+To make use of our database, the following API can be used: https://nanoscamdb.herokuapp.com/api/
+
+## LICENSE
+
+MIT
 
 ## Donate
 
-If you would like to help without contributing on GitHub yourself you can send some ETH or ERC20 tokens to [etherscamdb.eth](https://etherscan.io/address/etherscamdb.eth) :clap:
+If you would like to help without contributing on GitHub yourself you can send some ETH or ERC20 tokens to [etherscamdb.eth](https://etherscan.io/address/etherscamdb.eth) :clap: (original etherscamdb.info creator)
+
+Nano Currency Scam DB donation address: [xrb_3sxxxrk1sbdod6qzh9xmrkedp8m4h6serydm96kb6xhjni73581xtr7gydmj](https://raiblocks.net/account/index.php?acc=xrb_3sxxxrk1sbdod6qzh9xmrkedp8m4h6serydm96kb6xhjni73581xtr7gydmj)

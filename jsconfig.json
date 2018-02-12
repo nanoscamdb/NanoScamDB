@@ -1,0 +1,21 @@
+{
+  "typeAcquisition": {
+    "enable": true
+  },
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "module": "commonjs",
+    "alwaysStrict": true,
+    "noImplicitUseStrict": true,
+    "noImplicitAny": false,
+    "baseUrl": "/",
+    "checkJs": true,
+    "moduleResolution": "node",
+    "target": "es2017",
+    "noUnusedLocals": true,
+    "strict": true,
+    "strictFunctionTypes": false,
+    "newLine": "LF",
+    "noUnusedParameters": true
+  }
+}
