@@ -23,6 +23,8 @@ const updatePath = helpers.localFile('update.js')
 
 /* See if there's an up-to-date cache, otherwise run `update.js` to create one. */
 const getCache = async function () {
+  helpers.rollbar.info('Starting getCache')
+
   return new Promise(async (resolve, reject) => {
     const exists = await fs.pathExists(cachePath)
 
