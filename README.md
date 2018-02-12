@@ -22,7 +22,7 @@ The command line should now exit, asking you to update the config.js file with c
 
 Environment variables should be set for sensitive information:
 
-```json
+```js
 {
 	"port": process.env.PORT || 3000,
 	"cache_refreshing_interval": process.env.CACHE_REFRESHING_INTERVAL || 1000 * 60 * 60 * 2,
