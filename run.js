@@ -747,5 +747,5 @@ if (2 in process.argv) {
     }
   }, interval);
 
-  getCache().then(startWebServer, helpers.rollbar.error)
+  getCache().then(startWebServer, (err) => helpers.rollbar.error(err))
 }
