@@ -1,9 +1,13 @@
 {
-  "name": "nano-scam-database",
+  "name": "nano-scam-db",
   "version": "1.0.0",
   "main": "run.js",
   "scripts": {
     "start": "node run.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pocesar/NanoScamDB.git"
   },
   "license": "MIT",
   "dependencies": {
