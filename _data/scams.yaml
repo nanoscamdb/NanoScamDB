@@ -19,3 +19,30 @@
     category: Phishing
     subcategory: NanoWallet
     description: 'Impersonating raiwallet website'
+-
+    id: 2419
+    name: changellyl.net
+    url: 'http://changellyl.net/'
+    category: Phishing
+    subcategory: Changelly
+-
+    id: 2489
+    name: xn--changely-j59c.com
+    url: 'http://xn--changely-j59c.com'
+    category: Phishing
+    subcategory: Changelly
+    description: 'Fake Changelly site'
+-
+    id: 2551
+    name: changellyli.com
+    url: 'http://changellyli.com'
+    category: Phishing
+    subcategory: Changelly
+    description: 'Fake Changelly site'
+-
+    id: 2970
+    name: http://changlley.org
+    url: 'http://changlley.org'
+    category: Phishing
+    subcategory: Changelly
+    description: 'Fake Changelly'
