@@ -47,10 +47,10 @@
 <table class="ui sortable celled table">
   <thead>
     <tr>
-      <th class="{{ sorting.category }}">Category</th>
-      <th class="{{ sorting.subcategory }}">Subcategory</th>
-      <th class="{{ sorting.status }}">Status</th>
-      <th class="{{ sorting.title }}">Title</th>
+      <th class="{{ sorting.category }} {{ sorting.category.direction }}" data-direction="{{ sorting.category.direction }}" data-name="category">Category</th>
+      <th class="{{ sorting.subcategory }} {{ sorting.subcategory.direction }}" data-direction="{{ sorting.subcategory.direction }}" data-name="subcategory">Subcategory</th>
+      <th class="{{ sorting.status }} {{ sorting.status.direction }}" data-direction="{{ sorting.status.direction }}" data-name="status">Status</th>
+      <th class="{{ sorting.title }} {{ sorting.title.direction }}" data-direction="{{ sorting.title.direction }}" data-name="title">Title</th>
       <th id="info">Info</th>
     </tr>
   </thead>

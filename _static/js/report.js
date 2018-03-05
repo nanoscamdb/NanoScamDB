@@ -1,22 +1,23 @@
-var reportType;
-var args = {};
+$(function () {
+  'use strict'
 
-function finish() {
-  $(".captcha").fadeOut('', function () {
-    $(".loading").fadeIn('', function () {
-      $.post("https://lu1t.nl/report.php", {
-        reportType: reportType,
-        args: args
-      }).done(function (data) {
-        $(".loading").fadeOut('', function () {
-          $(".end").fadeIn();
+  var reportType;
+  var args = {};
+
+  function finish() {
+    $(".captcha").fadeOut('', function () {
+      $(".loading").fadeIn('', function () {
+        $.post("", {
+          reportType: reportType,
+          args: args
+        }).done(function (data) {
+          $(".loading").fadeOut('', function () {
+            $(".end").fadeIn();
+          });
         });
       });
     });
-  });
-}
-
-$(function () {
+  }
 
   $("#1yes").click(function () {
     $(".question1").fadeOut('', function () {

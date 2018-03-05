@@ -20,7 +20,7 @@ const rollbar = module.exports.rollbar = !process.env['ROLLBAR_ACCESS_TOKEN'] ? 
 const config = require('./config')
 const cache = Object.create(null)
 
-const { html } = require('common-tags')
+const { html, stripIndents } = require('common-tags')
 
 /**
  * @param {string[]} paths
@@ -69,9 +69,9 @@ module.exports.replaceVars = function(str, vars) {
   const merged = Object.assign({}, mergeVars, vars)
   const keys = Object.keys(merged)
 
-  return html`${keys.reduce((out, key) => {
+  return stripIndents(html`${keys.reduce((out, key) => {
     return out.split(`{{ ${key} }}`).join(`${merged[key]}`)
-  }, str)}`
+  }, str)}`)
 }
 
 /**
@@ -104,5 +104,7 @@ module.exports.template = async function template(name, vars = {}) {
 module.exports.layout = async function layout(template, vars) {
   return module.exports.template('default', Object.assign({
     content: await module.exports.template(template, vars)
-  }, vars))
+  }, vars, {
+    'page.title': `${vars['page.title'] ? vars['page.title'] + ' | ' : ''}Nano Currency (XRB) Scam Database`
+  }))
 }

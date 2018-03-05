@@ -1,15 +1,19 @@
 $(function () {
-  $("th").click(function () {
-    if ($(this).html() != 'Info') {
-      $("th").removeClass("sorted descending");
-      $(this).addClass("sorted descending");
-      var path = window.location.pathname.split("/");
+  $('thead').on('click', 'th', function(e){
+    var target = $(e.target)
+    var data = target.data('name')
+    var direction = target.data('direction')
 
-      if (typeof path[2] === 'undefined' || path[2] == '') {
-        window.location.assign("/scams/1/" + $(this).html().toLowerCase());
+    if (data) {
+      var path = window.location.pathname.split('/')
+
+      direction = direction === 'ascending' ? 'descending' : 'ascending'
+
+      if (typeof path[2] === 'undefined') {
+        window.location.assign('/scams/1/' + data + '/' + direction)
       } else {
-        window.location.assign("/scams/" + path[2] + "/" + $(this).html().toLowerCase());
+        window.location.assign('/scams/' + path[2] + '/' + data + '/' + direction)
       }
     }
-  });
-});
+  })
+})

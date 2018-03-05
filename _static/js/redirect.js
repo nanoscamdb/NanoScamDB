@@ -1,5 +1,5 @@
 $(function () {
   $("button").click(function () {
-    window.location.assign($("#domain").html())
+    window.location.assign($("#domain").text())
   })
 })

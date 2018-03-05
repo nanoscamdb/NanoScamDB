@@ -2,6 +2,7 @@
       href="/css/search.css">
 <h1>
   <i class="search icon"></i> Check URL</h1>
+
 <div id="verified"
      class="ui icon message">
   <i class="checkmark icon"></i>
@@ -12,6 +13,7 @@
     <p>This is a verified domain. You can trust the contents.</p>
   </div>
 </div>
+
 <div id="blocked"
      class="ui icon message">
   <i class="warning sign icon"></i>
@@ -22,6 +24,7 @@
     <p id="blacklistmessage">This domain was put on the blacklist.</p>
   </div>
 </div>
+
 <div id="neutral"
      class="ui icon message">
   <i class="info circle icon"></i>
@@ -32,12 +35,16 @@
     <p>This domain wasn't recognized as a malicious domain, nor as verified. Be careful!</p>
   </div>
 </div>
+
 <p id="helpmessage">Enter an URL to check whether you can trust it or not.</p>
+
 <div class="ui action input">
   <input type="text"
+         id="search-input"
          placeholder="https://raiblocks.net">
   <button class="ui button">Check</button>
 </div>
+
 <h1>Trusted domains</h1>
 <table class="ui celled table">
   <thead>

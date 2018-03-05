@@ -10,10 +10,9 @@ const request = require('request')
 const app = express()
 const config = require('./config')
 const helpers = require('./helpers')
-const { html, safeHtml } = require('common-tags')
+const { html, safeHtml, stripIndents } = require('common-tags')
 let cache = null
 let updating_now = false
-let icon_warnings = []
 var older_cache_time
 
 const cachePath = helpers.localFile('_cache', 'cache.json')
@@ -21,7 +20,7 @@ const updatePath = helpers.localFile('update.js')
 
 /* See if there's an up-to-date cache, otherwise run `update.js` to create one. */
 const getCache = async function () {
-  helpers.rollbar.info('Starting getCache')
+  //helpers.rollbar.info('Starting getCache')
 
   return new Promise(async (resolve, reject) => {
     const exists = await fs.pathExists(cachePath)
@@ -94,26 +93,26 @@ const getCache = async function () {
 
 /* Generate an abuse report for a scam domain */
 function generateAbuseReport(scam) {
-  let abusereport = `I would like to inform you of suspicious activities at the domain ${url.parse(scam.url).hostname}
-${'ip' in scam ? `located at IP address ${scam['ip']}`: ''}.
+  let abusereport = stripIndents`I would like to inform you of suspicious activities at the domain ${url.parse(scam.url).hostname}
+    ${'ip' in scam ? `located at IP address ${scam['ip']}`: ''}.
 
-${'subcategory' in scam && scam.subcategory == "NanoWallet" ?
+    ${'subcategory' in scam && scam.subcategory == "NanoWallet" ?
     `The domain is impersonating NanoWallet.io, a website where people can create
-Nano wallets (a cryptocurrency like Bitcoin).` : ''}
+    Nano wallets (a cryptocurrency like Bitcoin).` : ''}
 
-${'category' in scam && scam.category == "Fake ICO" ?
+    ${'category' in scam && scam.category == "Fake ICO" ?
     `The domain is impersonating a website where an ICO is being held (initial coin offering, like
-an initial public offering but it's for cryptocurrencies)` : ''}
+    an initial public offering but it's for cryptocurrencies)` : ''}
 
-${'category' in scam && scam.category == "Phishing" ?
+    ${'category' in scam && scam.category == "Phishing" ?
     `The attackers wish to steal funds by using phishing to get the victim's private keys (passwords to a wallet)
-and using them to send funds to their own wallets.` : ''}
+    and using them to send funds to their own wallets.` : ''}
 
-${'category' in scam && scam.category == "Fake ICO" ?
+    ${'category' in scam && scam.category == "Fake ICO" ?
     `The attackers wish to steal funds by cloning the real website and changing the XRB address so
-people will send funds to the attackers' address instead of the real address.` : ''}
+      people will send funds to the attackers' address instead of the real address.` : ''}
 
-Please shut down this domain so further attacks will be prevented.`
+    Please shut down this domain so further attacks will be prevented.`
 
   return abusereport
 }
@@ -131,336 +130,440 @@ function startWebServer() {
   })
 
   app.get('/search/', async function (_req, res) { // Serve /search/
-    let table = ""
 
-    const data = await getCache()
+    const verified = [].concat((await getCache()).verified)
 
-    const sorted = data.verified.sort(function (a, b) {
+    const sorted = verified.sort(function (a, b) {
       return a.name.localeCompare(b.name)
     })
 
-    for (let url of sorted) {
+    const table = sorted.map((url) => {
       if ('featured' in url && url.featured) {
-        if (
+        // TODO: put the verified images here
+        /*if (
           await fs.pathExists("_static/img/" + url.name.toLowerCase().replace(' ', '') + ".png") ||
           await fs.pathExists("_static/img/" + url.name.toLowerCase().replace(' ', '') + ".svg")
         ) {
           table += "<tr><td><img class='project icon' src='/img/" + url.name.toLowerCase().replace(' ', '') + ".png'>" + url.name + "</td><td><a target='_blank' href='" + url.url + "'>" + url.url + "</a></td></tr>";
-        } else {
-          helpers.rollbar.warn(`Warning: No verified icon was found for ${url.name}`);
-          table += "<tr><td>" + url.name + "</td><td><a target='_blank' href='" + url.url + "'>" + url.url + "</a></td></tr>";
-        }
+        } else {*/
+          //helpers.rollbar.warn(`Warning: No verified icon was found for ${url.name}`);
+        return `<tr>
+          <td>${url.name}</td>
+          <td><a target="_blank" href="${url.url}">${url.url}</a></td>
+        </tr>`
+        //}
       }
-    }
 
-    res.send(await helpers.layout('search', { 'trusted.table': table }))
+      return null
+    }).filter((s) => s).join('')
+
+    res.send(await helpers.layout('search', {
+      'trusted.table': table,
+      'page.title': 'Search for scam sites, scammers addresses and scam ips'
+    }))
   })
 
   app.get('/faq/', async function (_req, res) { // Serve /faq/
-    res.send(await helpers.layout('faq', {}))
-  });
+    res.send(await helpers.layout('faq', {
+      'page.title': 'FAQ'
+    }))
+  })
 
-  app.get('/report/:type?/:value?', async function (req, res) { // Serve /report/, /report/domain/, and /report/address/ (or /report/domain/fake-mycrypto.com
-    if (!req.params.type) {
-      res.send(await helpers.layout('report', {}));
-    } else if (req.params.type == "address") {
-      if (req.params.value) {
-        res.send(await helpers.layout('reportaddress', { 'page.placeholder': req.params.value }));
-      } else {
-        res.send(await helpers.layout('reportaddress', { 'page.placeholder': '' }));
-      }
-    } else if (req.params.type == "domain") {
-      if (req.params.value) {
-        res.send(await helpers.layout('reportdomain', { 'page.placeholder': req.params.value }));
-      } else {
-        res.send(await helpers.layout('reportdomain', { 'page.placeholder': '' }));
-      }
-    } else {
-      res.sendStatus(404)
+  // Serve /report/, /report/domain/, and /report/address/ or /report/domain/fake-mycrypto.com
+  app.get('/report/:type?/:value?', async function (req, res, next) {
+    let value = ''
+
+    if (req.params.value) {
+      value = safeHtml`${req.params.value}`
+    }
+
+    switch (`${req.params.type}`) {
+      case 'address':
+        res.send(await helpers.layout('reportaddress', { 'page.placeholder': value }))
+        break
+      case 'domain':
+        res.send(await helpers.layout('reportdomain', { 'page.placeholder': value }))
+        break
+      default:
+        if (!req.params.type) {
+          res.send(await helpers.layout('report', {}))
+        } else {
+          return next(new Error(`Request type ${req.params.type}`))
+        }
     }
   })
 
-  app.get('/scams/:page?/:sorting?/', async function (req, res) { // Serve /scams/
+  // Serve /scams/
+  app.get('/scams/:page?/:sorting?/:direction?', async function (req, res, next) {
     const MAX_RESULTS_PER_PAGE = 30
-    const cache = await getCache()
-    let scams = []
-    let sorting = ''
+    const scams = [].concat((await getCache()).scams)
 
-    if (!req.params.sorting || req.params.sorting == 'latest') {
-      scams = cache.scams.sort(function (a, b) {
-        return b.id - a.id
-      })
-    } else if (req.params.sorting == 'oldest') {
-      scams = cache.scams.sort(function (a, b) {
-        return a.id - b.id
-      })
-    } else if (req.params.sorting == 'status') {
-      template = template.replace("{{ sorting.status }}", "sorted descending");
-      scams = cache.scams.sort(function (a, b) {
-        if ('status' in a && 'status' in b) {
-          if ((a.status == 'Active' && b.status != 'Active') || (a.status == 'Inactive' && (b.status == 'Suspended' || b.status == 'Offline')) || (a.status == 'Suspended' && b.status == 'Offline')) {
+    const currentDirection = `${req.params.direction}` === 'ascending' ? 'ascending' : 'descending'
+
+    let direction = {
+      category: '',
+      subcategory: '',
+      status: '',
+      title: '',
+    }
+
+    let sorting = {
+      category: '',
+      subcategory: '',
+      status: '',
+      title: ''
+    }
+
+    switch (`${req.params.sorting}`) {
+      case 'category':
+        sorting.category = 'sorted'
+        direction.category = currentDirection
+
+        scams.sort(function (a, b) {
+          if ('category' in a && 'category' in b && a.category && b.category) {
+            return a.category.localeCompare(b.category)
+          } else {
             return -1
-          } else if (a.status == b.status) {
-            return 0
+          }
+        })
+        break
+      case 'subcategory':
+        sorting.subcategory = 'sorted'
+        direction.subcategory = currentDirection
+
+        scams.sort(function (a, b) {
+          if ('subcategory' in a && 'subcategory' in b && a.subcategory && b.subcategory) {
+            return a.subcategory.localeCompare(b.subcategory)
+          } else {
+            return -1
+          }
+        })
+        break
+      case 'title':
+        sorting.title = 'sorted'
+        direction.title = currentDirection
+
+        scams.sort(function (a, b) {
+          return a.name.localeCompare(b.name)
+        })
+        break
+      case 'status':
+        sorting.status = 'sorted'
+        direction.status = currentDirection
+
+        scams.sort(function (a, b) {
+          if ('status' in a && 'status' in b) {
+            if ((a.status == 'Active' && b.status != 'Active') || (a.status == 'Inactive' && (b.status == 'Suspended' || b.status == 'Offline')) || (a.status == 'Suspended' && b.status == 'Offline')) {
+              return -1
+            } else if (a.status == b.status) {
+              return 0
+            } else {
+              return 1
+            }
           } else {
             return 1
           }
+        })
+        break
+      default:
+        if (!req.params.sorting) {
+          scams.sort(function (a, b) {
+            return b.id - a.id
+          })
         } else {
-          return 1
+          return next(new Error(`Invalid sorting "${req.params.sorting}"`))
         }
-      });
-    } else if (req.params.sorting == 'category') {
-      template = template.replace("{{ sorting.category }}", "sorted descending");
-      scams = cache.scams.sort(function (a, b) {
-        if ('category' in a && 'category' in b && a.category && b.category) {
-          return a.category.localeCompare(b.category);
-        } else {
-          return -1;
-        }
-      });
-    } else if (req.params.sorting == 'subcategory') {
-      template = template.replace("{{ sorting.subcategory }}", "sorted descending");
-      scams = cache.scams.sort(function (a, b) {
-        if ('subcategory' in a && 'subcategory' in b && a.subcategory && b.subcategory) {
-          return a.subcategory.localeCompare(b.subcategory);
-        } else {
-          return -1;
-        }
-      });
-    } else if (req.params.sorting == 'title') {
-      template = template.replace("{{ sorting.title }}", "sorted descending");
-      scams = cache.scams.sort(function (a, b) {
-        return a.name.localeCompare(b.name);
-      });
-    } else {
-      res.status(404).send(default_template.replace('{{ content }}', fs.readFileSync('./_layouts/404.html', 'utf8')));
     }
 
-    template = template.replace("{{ sorting.category }}", "");
-    template = template.replace("{{ sorting.subcategory }}", "");
-    template = template.replace("{{ sorting.status }}", "");
-    template = template.replace("{{ sorting.title }}", "");
+    if (currentDirection === 'descending') {
+      scams.reverse()
+    }
 
-    let addresses = {};
+    let addresses = {}
 
-    var intActiveScams = 0;
-    var intInactiveScams = 0;
+    var intActiveScams = 0
+    var intInactiveScams = 0
 
-    scams.forEach(function (scam, index) {
+    scams.forEach(function (scam) {
       if ('addresses' in scam) {
-        scams[index].addresses.forEach(function (address) {
-          addresses[address] = true;
-        });
+        scam.addresses.forEach(function (address) {
+          addresses[address] = true
+        })
       }
 
       if ('status' in scam) {
         if (scam.status === 'Active') {
-          ++intActiveScams;
+          ++intActiveScams
         } else {
-          ++intInactiveScams;
+          ++intInactiveScams
         }
       }
-    });
+    })
 
-    template = template.replace("{{ scams.total }}", scams.length.toLocaleString('en-US'));
-    template = template.replace("{{ scams.active }}", intActiveScams.toLocaleString('en-US'));
-    template = template.replace("{{ addresses.total }}", Object.keys(addresses).length.toLocaleString('en-US'));
-    template = template.replace("{{ scams.inactive }}", intInactiveScams.toLocaleString('en-US'));
+    let max = MAX_RESULTS_PER_PAGE
+    let start = 0
+    let pagination = []
 
-    var table = "";
+    const page = +req.params.page || 1
+
     if (req.params.page == "all") {
-      var max = scams.length - 1; //0-based indexing
-      var start = 0;
-    } else if (!isNaN(parseInt(req.params.page))) {
-      var max = (req.params.page * MAX_RESULTS_PER_PAGE) + MAX_RESULTS_PER_PAGE;
-      var start = req.params.page * MAX_RESULTS_PER_PAGE;
-    } else {
-      var max = MAX_RESULTS_PER_PAGE;
-      var start = 0;
+      max = scams.length
+    } else if (page) {
+      max = ((page - 1) * MAX_RESULTS_PER_PAGE) + MAX_RESULTS_PER_PAGE
+      start = (page - 1) * MAX_RESULTS_PER_PAGE
     }
-    for (var i = start; i <= max; i++) {
-      if (scams.hasOwnProperty(i) === false) {
-        continue;
-      }
-      if ('status' in scams[i]) {
-        if (scams[i].status == "Active") {
-          var status = "<td class='offline'><i class='warning sign icon'></i> Active</td>";
-        } else if (scams[i].status == "Inactive") {
-          var status = "<td class='suspended'><i class='remove icon'></i> Inactive</td>";
-        } else if (scams[i].status == "Offline") {
-          var status = "<td class='activ'><i class='checkmark icon'></i> Offline</td>";
-        } else if (scams[i].status == "Suspended") {
-          var status = "<td class='suspended'><i class='remove icon'></i> Suspended</td>";
+
+    const paginate = req.params.sorting ? `/${req.params.sorting}/${currentDirection}` : ''
+
+    const table = scams.slice(start, max).map((scam) => {
+      let status = '<td>None</td>'
+      let category = scam.category || '<i class="remove icon"></i> None'
+      let subcategory = scam.subcategory  || '<i class="remove icon"></i> None'
+
+      if ('status' in scam) {
+        switch (scam.status) {
+          case 'Active':
+            status = "<td class='offline'><i class='warning sign icon'></i> Active</td>"
+            break
+          case 'Inactive':
+            status = "<td class='suspended'><i class='remove icon'></i> Inactive</td>"
+            break
+          case 'Offline':
+            status = "<td class='activ'><i class='checkmark icon'></i> Offline</td>"
+            break
+          case 'Suspended':
+            status = "<td class='suspended'><i class='remove icon'></i> Suspended</td>"
+            break
         }
-      } else {
-        var status = "<td>None</td>";
       }
-      if ('category' in scams[i]) {
-        switch (scams[i].category) {
+
+      if ('category' in scam) {
+        switch (scam.category) {
           case "Phishing":
-            var category = '<i class="address book icon"></i> Phishing';
-            break;
+            category = '<i class="address book icon"></i> Phishing'
+            break
           case "Scamming":
-            var category = '<i class="payment icon"></i> Scamming';
-            break;
+            category = '<i class="payment icon"></i> Scamming'
+            break
           case "Fake ICO":
-            var category = '<i class="dollar icon"></i> Fake ICO';
-            break;
-          default:
-            var category = scams[i].category;
+            category = '<i class="dollar icon"></i> Fake ICO'
+            break
         }
-      } else {
-        var category = '<i class="remove icon"></i> None';
       }
-      if ('subcategory' in scams[i] && scams[i].subcategory) {
-        if (scams[i].subcategory.toLowerCase() == "wallets") {
-          var subcategory = '<i class="credit card alternative icon"></i> ' + scams[i].subcategory;
-        } else if (fs.existsSync("_static/img/" + scams[i].subcategory.toLowerCase().replace(/\s/g, '') + ".png")) {
-          var subcategory = "<img src='/img/" + scams[i].subcategory.toLowerCase().replace(/\s/g, '') + ".png' class='subcategoryicon'> " + scams[i].subcategory;
+
+      if ('subcategory' in scam && scam.subcategory) {
+        const sub = scam.subcategory.toLowerCase().replace(/\s/g, '')
+
+        if (sub == "wallets") {
+          subcategory = `<i class="credit card alternative icon"></i> ${scam.subcategory}`
+        }
+
+        // TODO: put icons here
+        /*else if (fs.existsSync(`_static/img/${sub}.png`)) {
+          subcategory = `<img
+            src="/img/${scams[i].subcategory.toLowerCase().replace(/\s/g, '')}.png"
+            class="subcategoryicon"> ${scams[i].subcategory}`;
         } else {
-          var subcategory = scams[i].subcategory;
+          subcategory = scams[i].subcategory
           if (!(icon_warnings.includes(subcategory))) {
-            icon_warnings.push(subcategory);
-            console.log("Warning! No subcategory icon found for " + subcategory);
+            icon_warnings.push(subcategory)
           }
-        }
-      } else {
-        var subcategory = '<i class="remove icon"></i> None';
+        }*/
       }
-      if (scams[i].name.length > 40) {
-        scams[i].name = scams[i].name.substring(0, 40) + '...';
+
+      let name = scam.name
+
+      if (name.length > 40) {
+        name = name.substring(0, 40) + '...'
       }
-      table += "<tr><td>" + category + "</td><td>" + subcategory + "</td>" + status + "<td>" + scams[i].name + "</td><td class='center'><a href='/scam/" + scams[i].id + "'><i class='search icon'></i></a></td></tr>";
-    }
-    template = template.replace("{{ scams.table }}", table);
+
+      return `<tr>
+        <td>${category}</td>
+        <td>${subcategory}</td>
+        ${status}
+        <td>${name}</td>
+        <td class="center">
+          <a href='/scam/${scam.id}'><i class='search icon'></i></a>
+        </td>
+        </tr>`
+    }).join('')
 
     if (req.params.page !== "all") {
-      var intCurrentPage = 0;
-      if (Number.parseInt(req.params.page) > 0) {
-        intCurrentPage = req.params.page;
-      }
-      var strPagination = "";
-      if (intCurrentPage == 0) {
-        var arrLoop = [1, 6];
-      } else if (intCurrentPage == 1) {
-        var arrLoop = [0, 5];
-      } else if (intCurrentPage == 2) {
-        var arrLoop = [-1, 4];
-      } else {
-        var arrLoop = [-2, 3];
-      }
-      for (var i = arrLoop[0]; i < arrLoop[1]; i++) {
-        var intPageNumber = (Number(intCurrentPage) + Number(i));
-        var strItemClass = "item";
-        var strHref = "/scams/" + intPageNumber + "/";
-        if (req.params.sorting) {
-          strHref += req.params.sorting + "/";
-        }
-        if ((intPageNumber > (scams.length) / MAX_RESULTS_PER_PAGE) || (intPageNumber < 1)) {
-          strItemClass = "disabled item";
-          strHref = "#";
-        } else if (intCurrentPage == intPageNumber) {
-          strItemClass = "active item";
-        }
-        strPagination += "<a href='" + strHref + "' class='" + strItemClass + "'>" + intPageNumber + "</a>";
-      }
-      if (intCurrentPage > 3) {
-        if (req.params.sorting) {
-          strPagination = "<a class='item' href='/scams/1/" + req.params.sorting + "'><i class='angle double left icon'></i></a>" + strPagination;
-        } else {
-          strPagination = "<a class='item' href='/scams/1/" + req.params.sorting + "'><i class='angle double left icon'></i></a>" + strPagination;
-        }
-      }
-      if (intCurrentPage < Math.ceil(scams.length / MAX_RESULTS_PER_PAGE) - 3) {
-        if (req.params.sorting) {
-          strPagination += "<a class='item' href='/scams/" + (Math.ceil(scams.length / MAX_RESULTS_PER_PAGE) - 1) + "/" + req.params.sorting + "'><i class='angle double right icon'></i></a>";
-        } else {
-          strPagination += "<a class='item' href='/scams/" + (Math.ceil(scams.length / MAX_RESULTS_PER_PAGE) - 1) + "'><i class='angle double right icon'></i></a>";
-        }
-      }
-    } else {
-      strPagination = "";
-    }
-    template = template.replace("{{ scams.pagination }}", "<div class='ui pagination menu'>" + strPagination + "</div>");
-    res.send(default_template.replace('{{ content }}', template));
-  });
+      let arrLoop = [-2, 3]
 
-  app.get('/scam/:id/', async function (req, res) { // Serve /scam/<id>/
-    let startTime = (new Date()).getTime();
-    let scam = getCache().scams.find(function (scam) {
-      return scam.id == req.params.id;
-    });
-    var actions_text = "";
-    template = template.replace("{{ scam.id }}", scam.id);
-    template = template.replace("{{ scam.name }}", scam.name);
+      if (page == 0) {
+        arrLoop = [1, 6]
+      } else if (page == 1) {
+        arrLoop = [0, 5]
+      } else if (page == 2) {
+        arrLoop = [-1, 4]
+      }
+
+      for (let i = arrLoop[0]; i < arrLoop[1]; i++) {
+        let intPageNumber = (page + Number(i))
+        let strItemClass = "item"
+        let strHref = `/scams/${intPageNumber}${paginate}`
+
+        if ((intPageNumber > (scams.length) / MAX_RESULTS_PER_PAGE) || (intPageNumber < 1)) {
+          strItemClass = "disabled item"
+          strHref = "#"
+        } else if (page == intPageNumber) {
+          strItemClass = "active item"
+        }
+
+        pagination.push(`<a
+          href="${strHref}"
+          class="${strItemClass}">${intPageNumber}</a>`)
+      }
+
+      if (page > 3) {
+        pagination.unshift(`<a
+          class="item"
+          href="/scams/1${paginate}">
+          <i class="angle double left icon"></i>
+          </a>`)
+      }
+
+      if (page < Math.ceil(scams.length / MAX_RESULTS_PER_PAGE) - 3) {
+        pagination.push(`<a
+          class="item"
+          href="/scams/${(Math.ceil(scams.length / MAX_RESULTS_PER_PAGE) - 1)}${paginate}">
+          <i class='angle double right icon'></i>
+          </a>`
+        )
+      }
+    }
+
+    res.send(await helpers.layout('scams', {
+      'sorting.category.direction': direction.category,
+      'sorting.subcategory.direction': direction.subcategory,
+      'sorting.status.direction': direction.status,
+      'sorting.title.direction': direction.title,
+      'sorting.category': sorting.category,
+      'sorting.subcategory': sorting.subcategory,
+      'sorting.status': sorting.status,
+      'sorting.title': sorting.title,
+      'scams.total': scams.length.toLocaleString('en-US'),
+      'scams.active': intActiveScams.toLocaleString('en-US'),
+      'addresses.total': Object.keys(addresses).length.toLocaleString('en-US'),
+      'scams.inactive': intInactiveScams.toLocaleString('en-US'),
+      'scams.pagination': `<div class="ui pagination menu">${pagination.join('')}</div>`,
+      'scams.table': table,
+      'page.title': 'Active Scam List'
+    }))
+  })
+
+  app.get('/scam/:id/', async function (req, res, next) { // Serve /scam/<id>/
+    const startTime = Date.now()
+
+    const cache = await getCache()
+
+    const id = +req.params.id
+    const scam = cache.scams.find(function (scam) {
+      return scam.id == id
+    })
+
+    if (!scam) {
+      return next(new Error(`Scam id not found ${id}`))
+    }
+
+    const hostname = url.parse(scam.url).hostname
+
+    let actions = []
+    let category = ''
 
     if ('category' in scam) {
+      category = `<b>Category</b>: ${scam.category}`
+
       if ('subcategory' in scam) {
-        template = template.replace("{{ scam.category }}", '<b>Category</b>: ' + scam.category + ' - ' + scam.subcategory + '<BR>');
-      } else {
-        template = template.replace("{{ scam.category }}", '<b>Category</b>: ' + scam.category + '<BR>');
+        category += ` - ${scam.subcategory}`
       }
-    } else {
-      template = template.replace("{{ scam." + name + " }}", '');
+
+      category += '<br>'
     }
+
+    let status = ''
+
     if ('status' in scam) {
-      template = template.replace("{{ scam.status }}", '<b>Status</b>: <span class="class_' + scam.status.toLowerCase() + '">' + scam.status + '</span><BR>');
-    } else {
-      template = template.replace("{{ scam.status }}", '');
+      status = `<b>Status</b>: <span class="class_${scam.status.toLowerCase()}">${scam.status}</span><br>`
     }
+
+    let description = ''
+
     if ('description' in scam) {
-      template = template.replace("{{ scam.description }}", '<b>Description</b>: ' + scam.description + '<BR>');
-    } else {
-      template = template.replace("{{ scam.description }}", '');
+      description = `<b>Description</b>: ${scam.description}<br>`
     }
-    if ('nameservers' in scam) {
-      var nameservers_text = '';
-      scam.nameservers.forEach(function (nameserver) {
-        nameservers_text += '<div class="ui item">' + nameserver + '</div>';
-      });
-      template = template.replace("{{ scam.nameservers }}", '<b>Nameservers</b>: <div class="ui bulleted list">' + nameservers_text + '</div>');
-    } else {
-      template = template.replace("{{ scam.nameservers }}", '');
+
+    let nameservers =  ''
+
+    if ('nameservers' in scam && scam.nameservers && scam.nameservers.length) {
+      nameservers = `<b>Nameservers</b>:
+      <div class="ui bulleted list">
+        ${scam.nameservers.map(function (nameserver) {
+          return `<div class="ui item">${nameserver}</div>`
+        }).join('')}
+      </div>`
     }
-    if ('addresses' in scam) {
-      var addresses_text = '';
-      scam.addresses.forEach(function (address) {
-        addresses_text += '<div class="ui item"><a href="/address/' + address + '">' + address + '</a></div>';
-      });
-      template = template.replace("{{ scam.addresses }}", '<b>Related addresses</b>: <div class="ui bulleted list">' + addresses_text + '</div>');
-    } else {
-      template = template.replace("{{ scam.addresses }}", '');
+
+    let addresses = ''
+
+    if ('addresses' in scam && scam.addresses && scam.addresses.length) {
+      addresses = `<b>Related addresses</b>: <div class="ui bulleted list">
+      ${scam.addresses.map(function (address) {
+        return `<div class="ui item"><a href="/address/${address}">${address}</a></div>`
+      }).join('')}
+      </div>`
     }
+
+    let ip = ''
+
     if ('ip' in scam) {
-      template = template.replace("{{ scam.ip }}", '<b>IP</b>: <a href="/ip/' + scam.ip + '">' + scam.ip + '</a><BR>');
-    } else {
-      template = template.replace("{{ scam.ip }}", '');
+      ip = `<b>IP</b>: <a href="/ip/${scam.ip}">${scam.ip}</a><br>`
     }
+
+    let abusereport = ''
+    let screenshot = ''
+    let scamUrl = ''
+
     if ('url' in scam) {
-      template = template.replace("{{ scam.abusereport }}", generateAbuseReport(scam));
-      actions_text += '<button id="gen" class="ui icon secondary button"><i class="setting icon"></i> Abuse Report</button>';
-      actions_text += '<a target="_blank" href="http://web.archive.org/web/*/' + url.parse(scam.url).hostname + '" class="ui icon secondary button"><i class="archive icon"></i> Archive</a>';
-      template = template.replace("{{ scam.url }}", '<b>URL</b>: <a id="url" target="_blank" href="/redirect/' + encodeURIComponent(scam.url) + '">' + scam.url + '</a><BR>');
-      template = template.replace("{{ scam.googlethreat }}", "<b>Google Safe Browsing</b>: {{ scam.googlethreat }}<BR>");
-      template = template.replace("{{ scam.metamask }}", "<b>MetaMask Status:</b> " + (metamaskBlocked(url.parse(scam.url).hostname) ? "<span style='color:green'>Blocked</span>" : "<span style='color:red'>Not Blocked</span>") + "<br />");
+
+      abusereport = generateAbuseReport(scam)
+
+      actions.push(`<button
+        id="gen"
+        class="ui icon secondary button">
+        <i class="setting icon"></i> Abuse Report</button>`,
+        `<a target="_blank"
+        href="http://web.archive.org/web/*/${hostname}"
+        class="ui icon secondary button"><i class="archive icon"></i> Archive</a>`
+      )
+
+      scamUrl = `<b>URL</b>: <a id="url" target="_blank" href="/redirect/${encodeURIComponent(scam.url)}">${scam.url}</a><br>`
+
+      // TODO: put back the screenshots
+      /*
       if ('status' in scam && scam.status != 'Offline' && fs.existsSync('_cache/screenshots/' + scam.id + '.png')) {
         template = template.replace("{{ scam.screenshot }}", '<h3>Screenshot</h3><img src="/screenshot/' + scam.id + '.png">');
-      } else {
-        template = template.replace("{{ scam.screenshot }}", '');
-      }
-    } else {
-      template = template.replace("{{ scam.googlethreat }}", '');
-      template = template.replace("{{ scam.screenshot }}", '');
+      }*/
     }
-    actions_text += '<a target="_blank" href="https://github.com/' + config.repository.author + '/' + config.repository.name + '/blob/' + config.repository.branch + '/_data/scams.yaml" class="ui icon secondary button"><i class="write alternate icon"></i> Improve</a><button id="share" class="ui icon secondary button"><i class="share alternate icon"></i> Share</button>';
-    template = template.replace("{{ scam.actions }}", '<div id="actions" class="eight wide column">' + actions_text + '</div>');
+
+    actions.push(`<a
+      target="_blank"
+      href="https://github.com/${config.repository.author}/${config.repository.name}/blob/${config.repository.branch}/_data/scams.yaml"
+      class="ui icon secondary button">
+      <i class="write alternate icon"></i> Improve</a>
+      <button id="share" class="ui icon secondary button">
+      <i class="share alternate icon"></i> Share</button>`)
+
+    let googlethreat = ''
+
     if ('Google_SafeBrowsing_API_Key' in config && config.Google_SafeBrowsing_API_Key && 'url' in scam) {
       var options = {
         uri: 'https://safebrowsing.googleapis.com/v4/threatMatches:find?key=' + config.Google_SafeBrowsing_API_Key,
         method: 'POST',
         json: {
           client: {
-            clientId: "Ethereum Scam Database",
+            clientId: "Nano Scam DB",
             clientVersion: "1.0.0"
           },
           threatInfo: {
@@ -468,43 +571,70 @@ function startWebServer() {
             platformTypes: ["ANY_PLATFORM"],
             threatEntryTypes: ["THREAT_ENTRY_TYPE_UNSPECIFIED", "URL", "EXECUTABLE"],
             threatEntries: [{
-              "url": url.parse(scam.url).hostname
+              "url": hostname
             }]
           }
         }
-      };
-      request(options, function (error, response, body) {
-        if (!error && response.statusCode == 200) {
-          if ('matches' in body && 0 in body.matches) {
-            template = template.replace("{{ scam.googlethreat }}", "<span class='class_offline'>Blocked for " + body.matches[0]['threatType'] + '</span>');
+      }
+
+      googlethreat = `<b>Google Safe Browsing</b>: ${await new Promise((resolve) => {
+        request(options, function (error, response, body) {
+          if (!error && response.statusCode == 200) {
+            if (body && 'matches' in body && body.matches[0]) {
+              resolve(html`<span class='class_offline'>Blocked for ${body.matches[0]['threatType']}</span>`)
+            } else {
+              resolve(html`<span class='class_active'>Not Blocked</span> <a target='_blank' href='https://safebrowsing.google.com/safebrowsing/report_phish/'><i class='warning sign icon'></i></a>`)
+            }
           } else {
-            template = template.replace("{{ scam.googlethreat }}", "<span class='class_active'>Not Blocked</span> <a target='_blank' href='https://safebrowsing.google.com/safebrowsing/report_phish/'><i class='warning sign icon'></i></a>");
+            resolve('')
           }
-        }
-        template = template.replace("{{ page.built }}", '<p class="built">This page was built in <b>' + ((new Date()).getTime() - startTime) + '</b>ms, and last updated at <b>' + dateFormat(getCache().updated, "UTC:mmm dd yyyy, HH:MM") + ' UTC</b></p>');
-        res.send(default_template.replace('{{ content }}', template));
-      });
-    } else {
-      console.log("Warning: No Google Safe Browsing API key found");
-      res.send(default_template.replace('{{ content }}', template));
+        })
+      })}<br>`
     }
-  });
+
+    res.send(await helpers.layout('scam', {
+      'scam.id': scam.id,
+      'scam.name': safeHtml(scam.name),
+      'scam.category': category,
+      'scam.status': status,
+      'scam.description': description,
+      'scam.nameservers': nameservers,
+      'scam.addresses': addresses,
+      'scam.ip': ip,
+      'scam.abusereport': abusereport,
+      'scam.googlethreat': googlethreat,
+      'scam.screenshot': screenshot,
+      'scam.url': scamUrl,
+      'disqus': await helpers.template('disqus', {
+        'disqus.id': `scam-${scam.id}`
+      }),
+      'page.title': safeHtml`Scam ${scam.name}`,
+      'scam.actions': `<div id="actions" class="eight wide column">${actions.join('')}</div>`,
+      'page.built': `<p class="built">
+        This page was built in <b>${Date.now() - startTime}</b>ms, and
+        last updated at <b>${dateFormat(cache.updated, "UTC:mmm dd yyyy, HH:MM")} UTC</b>
+      </p>`
+    }))
+  })
 
   app.get('/ip/:ip/', async function (req, res) { // Serve /ip/<ip>/
     const ip = safeHtml`${req.params.ip}`
 
     const related = (await getCache()).scams.filter(function (obj) {
       return obj.ip === ip
-    }).reduce(function (out, value) {
-      return html`${out}
-        <div class="item">
-          <a href="/scam/${value.id}/">${value.name}</a>
-        </div>`
-    }, '')
+    }).map(function (value) {
+      return `<div class="item">
+        <a href="/scam/${value.id}/">${value.name}</a>
+      </div>`
+    }).join('')
 
     res.send(await helpers.layout('ip', {
       'ip.ip': ip,
-      'ip.scams': html`<div class="ui bulleted list">${related}</div>`
+      'ip.scams': html`<div class="ui bulleted list">${related}</div>`,
+      'disqus': await helpers.template('disqus', {
+        'disqus.id': `ip-${ip}`
+      }),
+      'page.title': `Scam report for IP ${ip}`
     }));
   });
 
@@ -517,24 +647,28 @@ function startWebServer() {
       } else {
         return false
       }
-    }).reduce(function (out, value) {
-      return html`${out}
-      <div class="item">
+    }).map(function (value) {
+      return `<div class="item">
         <a href="/scam/${value.id}/">${value.name}</a>
-      </div>`;
-    }, '')
+      </div>`
+    }).join('')
 
     res.send(await helpers.layout('address', {
       'address.address': address,
-      'address.scams': `<div class="ui bulleted list">${related}</div>`
-    }));
-  });
+      'disqus': await helpers.template('disqus', {
+        'disqus.id': `address-${address}`
+      }),
+      'address.scams': `<div class="ui bulleted list">${related}</div>`,
+      'page.title': `Scam report for address ${address}`
+    }))
+  })
 
   app.get('/redirect/:url/', async function (req, res) { // Serve /redirect/<url>/
     const url = safeHtml`${req.params.url}`
 
     res.send(await helpers.layout('redirect', {
-      'redirect.domain': url
+      'redirect.domain': url,
+      'page.title': 'Redirect warning'
     }))
   })
 
@@ -542,15 +676,16 @@ function startWebServer() {
     const cache = await getCache()
 
     res.send(await helpers.template('rss', {
-      'rss.entries': cache.scams.reduce(function (out, scam) {
-        return `${out}
-          <item>
+      'rss.entries': cache.scams.map(function (scam) {
+        const url = `${config.base_url}scam/${scam.id}`
+
+        return `<item>
+            <guid>${url}</guid>
             <title>${safeHtml`${scam.name}`}</title>
-            <link>${config.base_url}scam/${scam.id}/</link>
+            <link>${url}</link>
             <description>${scam.category}</description>
-          </item>
-        `;
-      }, '')
+          </item>`;
+      }).join('')
     }))
   })
 
@@ -577,7 +712,7 @@ function startWebServer() {
         break
       case 'check':
         {
-          const domainOrAddress = `${req.params.domain}`
+          const domainOrAddress = safeHtml`${req.params.domain}`
           const hostname = url.parse(domainOrAddress).hostname || ''
           const host = helpers.removeProtocol(domainOrAddress)
 
@@ -662,7 +797,7 @@ function startWebServer() {
         break
       case 'abusereport':
         {
-          const domain = `${req.params.domain}`
+          const domain = safeHtml`${req.params.domain}`
           const hostname = url.parse(domain).hostname
 
           const results = cache.scams.filter(function (scam) {
@@ -690,17 +825,28 @@ function startWebServer() {
     if (json) {
       res.json(json)
     } else {
-      res.send(await helpers.layout('api', {}))
+      res.send(await helpers.layout('api', {
+        'page.title': 'Use the API'
+      }))
     }
   })
 
-  app.get('*', async function (_req, res) { // Serve all other pages as 404
-    res.status(404).send(await helpers.template('404'))
+  // Serve all other pages as 404
+  app.get('*', async function (_req, res) {
+    res.status(404).send(await helpers.layout('404', {
+      'page.title': 'Not found'
+    }))
   })
 
   if (helpers.rollbar['errorHandler']) {
     app.use(helpers.rollbar['errorHandler']())
   }
+
+  app.use(async (_err, _req, res, _next) => {
+    res.status(404).send(await helpers.layout('404', {
+      'page.title': 'Error'
+    }))
+  })
 
   app.listen(config.port, function () { // Listen on port (defined in config)
     helpers.rollbar.info(`Content served on port ${config.port}`)

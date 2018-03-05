@@ -1,21 +1,22 @@
-var args = {};
+$(function () {
+  'use strict'
 
-function finish() {
-  $(".captcha").fadeOut('', function () {
-    $(".loading").fadeIn('', function () {
-      $.post("https://lu1t.nl/report.php", {
-        reportType: 'generalAddressReport',
-        args: args
-      }).done(function (data) {
-        $(".loading").fadeOut('', function () {
-          $(".end").fadeIn();
+  var args = {};
+
+  function finish() {
+    $(".captcha").fadeOut('', function () {
+      $(".loading").fadeIn('', function () {
+        $.post("", {
+          args: args
+        }).done(function (data) {
+          $(".loading").fadeOut('', function () {
+            $(".end").fadeIn();
+          });
         });
       });
     });
-  });
-}
+  }
 
-$(function () {
   var results = new RegExp('[\?&]([^&#]*)').exec(window.location.href);
   if (results != null) {
     $("#address").val(decodeURIComponent(results[1]).toString() || 0);
