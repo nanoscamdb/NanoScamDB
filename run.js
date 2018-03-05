@@ -6,13 +6,11 @@ const bodyParser = require('body-parser')
 const url = require('url')
 const dateFormat = require('dateformat')
 const spawn = require('child_process').spawn
-const download = require('download-file')
-const rimraf = require('rimraf')
-const crypto = require("crypto")
 const request = require('request')
 const app = express()
 const config = require('./config')
 const helpers = require('./helpers')
+const { html, safeHtml } = require('common-tags')
 let cache = null
 let updating_now = false
 let icon_warnings = []
@@ -31,7 +29,7 @@ const getCache = async function () {
     if (exists) {
       if (!cache) {
         try {
-          cache = JSON.parse((await fs.readFile(cachePath)).toString());
+          cache = JSON.parse(await fs.readFile(cachePath, { encoding: 'utf8' }))
 
           resolve(cache)
         } catch (e) {
@@ -50,24 +48,26 @@ const getCache = async function () {
 
           var checkDone2 = setInterval(function () {
             if (cache.updated != older_cache_time) {
-              clearInterval(checkDone2);
-              helpers.rollbar.info("Successfully updated cache!");
-              updating_now = false;
+              clearInterval(checkDone2)
+
+              helpers.rollbar.info("Successfully updated cache!")
+
+              updating_now = false
             }
-          }, 1000);
+          }, 1000)
         }
 
-        resolve(cache);
+        resolve(cache)
       }
     } else {
-      helpers.rollbar.info("No cache file found. Creating one...");
+      helpers.rollbar.info("No cache file found. Creating one...")
 
       if (!updating_now) {
-        updating_now = true;
+        updating_now = true
 
         spawn('node', [updatePath], {
           detached: true
-        });
+        })
       }
 
       var checkDone = setInterval(async function () {
@@ -77,40 +77,45 @@ const getCache = async function () {
           updating_now = false
 
           try {
-            cache = JSON.parse((await fs.readFile(cachePath)).toString())
+            cache = JSON.parse(await fs.readFile(cachePath, { encoding: 'utf8' }))
+
             clearInterval(checkDone)
+
             helpers.rollbar.info("Successfully updated cache!")
-            resolve(cache);
+            resolve(cache)
           } catch (err) {
             reject(err)
           }
         }
-      }, 1000);
+      }, 1000)
     }
   })
 }
 
 /* Generate an abuse report for a scam domain */
 function generateAbuseReport(scam) {
-  let abusereport = "";
-  abusereport += "I would like to inform you of suspicious activities at the domain " + url.parse(scam.url).hostname;
-  if ('ip' in scam) {
-    abusereport += " located at IP address " + scam['ip'] + ".";
-  } else {
-    abusereport += ".";
-  }
-  if ('subcategory' in scam && scam.subcategory == "NanoWallet") {
-    abusereport += "The domain is impersonating NanoWallet.io, a website where people can create Nano wallets (a cryptocurrency like Bitcoin).";
-  } else if ('category' in scam && scam.category == "Fake ICO") {
-    abusereport += "The domain is impersonating a website where an ICO is being held (initial coin offering, like an initial public offering but it's for cryptocurrencies).";
-  }
-  if ('category' in scam && scam.category == "Phishing") {
-    abusereport += "\r\n\r\nThe attackers wish to steal funds by using phishing to get the victim's private keys (passwords to a wallet) and using them to send funds to their own wallets.";
-  } else if ('category' in scam && scam.category == "Fake ICO") {
-    abusereport += "\r\n\r\nThe attackers wish to steal funds by cloning the real website and changing the XRB address so people will send funds to the attackers' address instead of the real address.";
-  }
-  abusereport += "\r\n\r\nPlease shut down this domain so further attacks will be prevented.";
-  return abusereport;
+  let abusereport = `I would like to inform you of suspicious activities at the domain ${url.parse(scam.url).hostname}
+${'ip' in scam ? `located at IP address ${scam['ip']}`: ''}.
+
+${'subcategory' in scam && scam.subcategory == "NanoWallet" ?
+    `The domain is impersonating NanoWallet.io, a website where people can create
+Nano wallets (a cryptocurrency like Bitcoin).` : ''}
+
+${'category' in scam && scam.category == "Fake ICO" ?
+    `The domain is impersonating a website where an ICO is being held (initial coin offering, like
+an initial public offering but it's for cryptocurrencies)` : ''}
+
+${'category' in scam && scam.category == "Phishing" ?
+    `The attackers wish to steal funds by using phishing to get the victim's private keys (passwords to a wallet)
+and using them to send funds to their own wallets.` : ''}
+
+${'category' in scam && scam.category == "Fake ICO" ?
+    `The attackers wish to steal funds by cloning the real website and changing the XRB address so
+people will send funds to the attackers' address instead of the real address.` : ''}
+
+Please shut down this domain so further attacks will be prevented.`
+
+  return abusereport
 }
 
 /* Start the web server */
@@ -119,19 +124,19 @@ function startWebServer() {
 
   app.use('/screenshot', express.static('_cache/screenshots/')); // Serve all screenshots
 
-  app.use(bodyParser.json()); // to support JSON-encoded bodies
+  app.use(bodyParser.json({ strict: true })) // to support JSON-encoded bodies
 
   app.get('/(/|index.html)?', async function (_req, res) { // Serve index.html
-    res.send(await helpers.layout('index', {}));
+    res.send(await helpers.layout('index', {}))
   })
 
   app.get('/search/', async function (_req, res) { // Serve /search/
-    let table = "";
+    let table = ""
 
     const data = await getCache()
 
-    const sorted = data.legiturls.sort(function (a, b) {
-      return a.name.localeCompare(b.name);
+    const sorted = data.verified.sort(function (a, b) {
+      return a.name.localeCompare(b.name)
     })
 
     for (let url of sorted) {
@@ -142,17 +147,17 @@ function startWebServer() {
         ) {
           table += "<tr><td><img class='project icon' src='/img/" + url.name.toLowerCase().replace(' ', '') + ".png'>" + url.name + "</td><td><a target='_blank' href='" + url.url + "'>" + url.url + "</a></td></tr>";
         } else {
-          helpers.rollbar.warn("Warning: No verified icon was found for " + url.name);
+          helpers.rollbar.warn(`Warning: No verified icon was found for ${url.name}`);
           table += "<tr><td>" + url.name + "</td><td><a target='_blank' href='" + url.url + "'>" + url.url + "</a></td></tr>";
         }
       }
     }
 
-    res.send(await helpers.layout('search', { 'trusted.table': table }));
-  });
+    res.send(await helpers.layout('search', { 'trusted.table': table }))
+  })
 
   app.get('/faq/', async function (_req, res) { // Serve /faq/
-    res.send(await helpers.layout('faq', {}));
+    res.send(await helpers.layout('faq', {}))
   });
 
   app.get('/report/:type?/:value?', async function (req, res) { // Serve /report/, /report/domain/, and /report/address/ (or /report/domain/fake-mycrypto.com
@@ -176,33 +181,37 @@ function startWebServer() {
   })
 
   app.get('/scams/:page?/:sorting?/', async function (req, res) { // Serve /scams/
-    const MAX_RESULTS_PER_PAGE = 30;
+    const MAX_RESULTS_PER_PAGE = 30
+    const cache = await getCache()
+    let scams = []
+    let sorting = ''
+
     if (!req.params.sorting || req.params.sorting == 'latest') {
-      var scams = getCache().scams.sort(function (a, b) {
-        return b.id - a.id;
-      });
+      scams = cache.scams.sort(function (a, b) {
+        return b.id - a.id
+      })
     } else if (req.params.sorting == 'oldest') {
-      var scams = getCache().scams.sort(function (a, b) {
-        return a.id - b.id;
-      });
+      scams = cache.scams.sort(function (a, b) {
+        return a.id - b.id
+      })
     } else if (req.params.sorting == 'status') {
       template = template.replace("{{ sorting.status }}", "sorted descending");
-      var scams = getCache().scams.sort(function (a, b) {
+      scams = cache.scams.sort(function (a, b) {
         if ('status' in a && 'status' in b) {
           if ((a.status == 'Active' && b.status != 'Active') || (a.status == 'Inactive' && (b.status == 'Suspended' || b.status == 'Offline')) || (a.status == 'Suspended' && b.status == 'Offline')) {
-            return -1;
+            return -1
           } else if (a.status == b.status) {
-            return 0;
+            return 0
           } else {
-            return 1;
+            return 1
           }
         } else {
-          return 1;
+          return 1
         }
       });
     } else if (req.params.sorting == 'category') {
       template = template.replace("{{ sorting.category }}", "sorted descending");
-      var scams = getCache().scams.sort(function (a, b) {
+      scams = cache.scams.sort(function (a, b) {
         if ('category' in a && 'category' in b && a.category && b.category) {
           return a.category.localeCompare(b.category);
         } else {
@@ -211,7 +220,7 @@ function startWebServer() {
       });
     } else if (req.params.sorting == 'subcategory') {
       template = template.replace("{{ sorting.subcategory }}", "sorted descending");
-      var scams = getCache().scams.sort(function (a, b) {
+      scams = cache.scams.sort(function (a, b) {
         if ('subcategory' in a && 'subcategory' in b && a.subcategory && b.subcategory) {
           return a.subcategory.localeCompare(b.subcategory);
         } else {
@@ -220,7 +229,7 @@ function startWebServer() {
       });
     } else if (req.params.sorting == 'title') {
       template = template.replace("{{ sorting.title }}", "sorted descending");
-      var scams = getCache().scams.sort(function (a, b) {
+      scams = cache.scams.sort(function (a, b) {
         return a.name.localeCompare(b.name);
       });
     } else {
@@ -482,270 +491,220 @@ function startWebServer() {
   });
 
   app.get('/ip/:ip/', async function (req, res) { // Serve /ip/<ip>/
-    let template = fs.readFileSync('./_layouts/ip.html', 'utf8');
-    template = template.replace("{{  }}", req.params.ip);
+    const ip = safeHtml`${req.params.ip}`
 
-    const cache = await getCache()
-
-    const related = cache.scams.filter(function (obj) {
-      return obj.ip === req.params.ip;
+    const related = (await getCache()).scams.filter(function (obj) {
+      return obj.ip === ip
     }).reduce(function (out, value) {
-      return `${out}<div class="item"><a href="/scam/${value.id}/">${value.name}</div>`;
-    }, '');
+      return html`${out}
+        <div class="item">
+          <a href="/scam/${value.id}/">${value.name}</a>
+        </div>`
+    }, '')
 
     res.send(await helpers.layout('ip', {
-      'ip.ip': `${req.params.ip}`,
-      'ip.scams': `<div class="ui bulleted list">${related}</div>`
+      'ip.ip': ip,
+      'ip.scams': html`<div class="ui bulleted list">${related}</div>`
     }));
   });
 
   app.get('/address/:address/', async function (req, res) { // Serve /address/<address>/
+    const address = safeHtml`${req.params.address}`
+
     const related = (await getCache()).scams.filter(function (obj) {
       if ('addresses' in obj) {
-        return obj.addresses.includes(req.params.address);
+        return obj.addresses.includes(address)
       } else {
-        return false;
+        return false
       }
     }).reduce(function (out, value) {
-      return `${out}<div class="item"><a href="/scam/${value.id}/">${value.name}</div>`;
-    }, '');
+      return html`${out}
+      <div class="item">
+        <a href="/scam/${value.id}/">${value.name}</a>
+      </div>`;
+    }, '')
 
     res.send(await helpers.layout('address', {
-      'address.address': req.params.address,
+      'address.address': address,
       'address.scams': `<div class="ui bulleted list">${related}</div>`
     }));
   });
 
   app.get('/redirect/:url/', async function (req, res) { // Serve /redirect/<url>/
-    res.send(await helpers.layout('redirect', { 'redirect.domain': req.params.url }));
-  });
+    const url = safeHtml`${req.params.url}`
 
-  app.get('/rss/', async function (req, res) { // Serve /rss/ (rss feed)
+    res.send(await helpers.layout('redirect', {
+      'redirect.domain': url
+    }))
+  })
+
+  app.get('/rss/', async function (_req, res) { // Serve /rss/ (rss feed)
     const cache = await getCache()
 
     res.send(await helpers.layout('rss', {
       'rss.entries': cache.scams.reduce(function (out, scam) {
-        return `${out}<item><title>${scam.name}</title><link>${config.base_url}scam/${scam.id}/</link><description>${scam.category}</description></item>`;
+        return `${out}
+          <item>
+            <title>${safeHtml`${scam.name}`}</title>
+            <link>${config.base_url}scam/${scam.id}/</link>
+            <description>${scam.category}</description>
+          </item>
+        `;
       }, '')
-    }));
-  });
+    }))
+  })
 
   app.get('/api/:type?/:domain?/', async function (req, res) { // Serve /api/<type>/
-    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Origin', '*')
 
     const cache = await getCache()
+    const type = safeHtml`${req.params.type}`
 
-    if (req.params.type == "scams") {
-      res.json({
-        success: true,
-        result: cache.scams
-      });
-    } else if (req.params.type == "addresses") {
-      res.json({
-        success: true,
-        result: cache.addresses
-      });
-    } else if (req.params.type == "ips") {
-      res.json({
-        success: true,
-        result: cache.ips
-      });
-    } else if (req.params.type == "verified") {
-      res.json({
-        success: true,
-        result: cache.legiturls
-      });
-    } else if (req.params.type == "blacklist") {
-      res.json(cache.blacklist);
-    } else if (req.params.type == "whitelist") {
-      res.json(cache.whitelist);
-    } else if (req.params.type == "check" && req.params.domain) {
-      //They can search for an address or domain.
-      if (/^xrb_?[0-9a-z]{60}$/.test(req.params.domain)) {
-        var blocked = false;
+    /** @type {any} */
+    let json = false
 
-        Object.keys(cache.addresses).forEach(function (address, index) {
-          //They searched for an address
-          if (req.params.domain == address) {
-            blocked = true;
-            res.json({
-              success: true,
-              result: 'blocked',
-              type: 'address',
-              entries: cache.scams.filter(function (scam) {
-                if ('addresses' in scam) {
-                  return (scam.addresses.includes(req.params.domain));
-                } else {
-                  return false;
-                }
-              })
-            });
-          }
-        });
-
-        if (!blocked) {
-          res.json({
-            success: true,
-            result: 'neutral',
-            type: 'address',
-            entries: {}
-          });
-        }
-      } else {
-        //They searched for a domain or an ip address
-        if (cache.whitelist.includes(url.parse(req.params.domain).hostname) || cache.whitelist.includes(req.params.domain)) {
-          res.json({
-            success: true,
-            input: url.parse(req.params.domain).hostname || req.params.domain,
-            result: 'verified'
-          });
-        } else if (cache.blacklist.includes(url.parse(req.params.domain).hostname) || cache.blacklist.includes(req.params.domain.replace(/(^\w+:|^)\/\//, ''))) {
-          if (/^(([1-9]?\d|1\d\d|2[0-5][0-5]|2[0-4]\d)\.){3}([1-9]?\d|1\d\d|2[0-5][0-5]|2[0-4]\d)$/.test(req.params.domain.replace(/(^\w+:|^)\/\//, ''))) {
-            //They searched for an ip address
-            res.json({
-              success: true,
-              input: req.params.domain.replace(/(^\w+:|^)\/\//, ''),
-              result: 'blocked',
-              type: 'ip',
-              entries: cache.scams.filter(function (scam) {
-                return (url.parse(scam.url).hostname == url.parse(req.params.domain).hostname || scam.url.replace(/(^\w+:|^)\/\//, '') == req.params.domain || scam.ip == req.params.domain.replace(/(^\w+:|^)\/\//, ''));
-              }) || false
-            });
-          } else {
-            //They searched for a domain
-            res.json({
-              success: true,
-              input: url.parse(req.params.domain).hostname || req.params.domain,
-              result: 'blocked',
-              type: 'domain',
-              entries: cache.scams.filter(function (scam) {
-                return (url.parse(scam.url).hostname == url.parse(req.params.domain).hostname || scam.url.replace(/(^\w+:|^)\/\//, '') == req.params.domain);
-              }) || false
-            });
-          }
-        } else {
-          res.json({
-            success: true,
-            result: 'neutral'
-          });
-        }
-      }
-    } else if (req.params.type == "abusereport" && req.params.domain) {
-      var results = cache.scams.filter(function (scam) {
-        return (url.parse(scam.url).hostname == url.parse(req.params.domain).hostname || scam.url.replace(/(^\w+:|^)\/\//, '') == req.params.domain);
-      }) || false;
-
-      if (results.length == 0) {
-        res.json({
-          success: false,
-          error: "URL wasn't found"
-        });
-      } else {
-        res.json({
+    switch (type) {
+      case 'scams':
+      case 'addresses':
+      case 'ips':
+      case 'verified':
+      case 'blacklist':
+      case 'whitelist':
+        json = {
           success: true,
-          result: generateAbuseReport(results[0])
-        });
-      }
-    } else {
-      res.send(await helpers.layout('api', {}));
+          result: cache[type]
+        }
+        break
+      case 'check':
+        {
+          const domainOrAddress = `${req.params.domain}`
+          const hostname = url.parse(domainOrAddress).hostname || ''
+          const host = helpers.removeProtocol(domainOrAddress)
+
+          if (domainOrAddress) {
+            //They can search for an address or domain.
+            if (/^xrb_?[0-9a-z]{60}$/.test(domainOrAddress)) {
+              const blocked = Object.keys(cache.addresses).some((address) => (domainOrAddress == address))
+
+              //They searched for an address
+              if (blocked) {
+                json = {
+                  success: true,
+                  result: 'blocked',
+                  type: 'address',
+                  entries: cache.scams.filter(function (scam) {
+                    if ('addresses' in scam) {
+                      return (scam.addresses.includes(domainOrAddress))
+                    } else {
+                      return false
+                    }
+                  })
+                }
+              } else {
+                json = {
+                  success: true,
+                  result: 'neutral',
+                  type: 'address',
+                  entries: []
+                }
+              }
+            } else {
+              //They searched for a domain or an ip address
+              if (cache.whitelist.includes(hostname) ||
+                cache.whitelist.includes(domainOrAddress)) {
+
+                json = {
+                  success: true,
+                  result: 'verified'
+                }
+              } else if (cache.blacklist.includes(hostname) ||
+                cache.blacklist.includes(host)) {
+
+                if (/^(([1-9]?\d|1\d\d|2[0-5][0-5]|2[0-4]\d)\.){3}([1-9]?\d|1\d\d|2[0-5][0-5]|2[0-4]\d)$/.test(host)) {
+                  //They searched for an ip address
+                  json = {
+                    success: true,
+                    result: 'blocked',
+                    type: 'ip',
+                    entries: cache.scams.filter(function (scam) {
+                      return (
+                        url.parse(scam.url).hostname == hostname ||
+                        helpers.removeProtocol(scam.url) == domainOrAddress ||
+                        scam.ip == host
+                      )
+                    })
+                  }
+                } else {
+                  //They searched for a domain
+                  json = {
+                    success: true,
+                    result: 'blocked',
+                    type: 'domain',
+                    entries: cache.scams.filter(function (scam) {
+                      return (
+                        url.parse(scam.url).hostname == hostname ||
+                        helpers.removeProtocol(scam.url) == domainOrAddress
+                      )
+                    })
+                  }
+                }
+              } else {
+                json = {
+                  success: false,
+                  result: 'neutral',
+                  type: 'unsupported',
+                  entries: []
+                }
+              }
+            }
+          }
+        }
+        break
+      case 'abusereport':
+        {
+          const domain = `${req.params.domain}`
+          const hostname = url.parse(domain).hostname
+
+          const results = cache.scams.filter(function (scam) {
+            return (
+              url.parse(scam.url).hostname == hostname ||
+              helpers.removeProtocol(scam.url) == domain
+            )
+          }) || []
+
+          if (results.length == 0) {
+            json = {
+              success: false,
+              error: "URL wasn't found"
+            }
+          } else {
+            json = {
+              success: true,
+              result: generateAbuseReport(results[0])
+            }
+          }
+        }
+        break
     }
-  });
 
-  app.post('/update/', function (req, res) { // New github update?
-    let rawBody = '';
-    req.setEncoding('utf8');
-
-    req.on('data', function (chunk) {
-      rawBody += chunk;
-    });
-
-    req.on('end', function () {
-
-      if (
-        'x-hub-signature' in req.headers &&
-        'Github_Hook_Secret' in config &&
-        crypto.timingSafeEqual(
-          Buffer.from(`${req.headers['x-hub-signature']}`),
-          Buffer.from("sha1=" + crypto.createHmac("sha1", `${config.Github_Hook_Secret}`).update(rawBody).digest("hex"))
-        )
-      ) {
-        helpers.rollbar.warn("New commit pushed", req);
-
-        download("https://raw.githubusercontent.com/" + config.repository.author + "/" + config.repository.name + "/" + config.repository.branch + "/_data/scams.yaml?no-cache=" + (new Date()).getTime(), {
-          directory: "_data/",
-          filename: "scams.yaml"
-        }, function (err) {
-          if (err) throw err;
-
-          download("https://raw.githubusercontent.com/" + config.repository.author + "/" + config.repository.name + "/" + config.repository.branch + "/_data/legit_urls.yaml?no-cache=" + (new Date()).getTime(), {
-            directory: "_data/",
-            filename: "legit_urls.yaml"
-          }, function (err) {
-            if (err) throw err;
-
-            res.status(200).end();
-
-            spawn('node', ['update.js'], {
-              detached: true
-            });
-          });
-        });
-      } else {
-        helpers.rollbar.error("Incorrect webhook attempt", { req });
-      }
-    });
-  });
+    if (json) {
+      res.json(json)
+    } else {
+      res.send(await helpers.layout('api', {}))
+    }
+  })
 
   app.get('*', async function (_req, res) { // Serve all other pages as 404
-    res.status(404).send(await helpers.template('404'));
-  });
+    res.status(404).send(await helpers.template('404'))
+  })
 
-  app.use(helpers.rollbar.errorHandler());
+  if (helpers.rollbar['errorHandler']) {
+    app.use(helpers.rollbar['errorHandler']())
+  }
 
   app.listen(config.port, function () { // Listen on port (defined in config)
-    helpers.rollbar.info(`Content served on ${config.base_url}:${config.port}`);
-  });
+    helpers.rollbar.info(`Content served on port ${config.port}`)
+  })
 }
 
-if (2 in process.argv) {
-  if (process.argv[2] == "--clean") {
-    rimraf('_cache', function () {
-      helpers.rollbar.info("Cleared cache")
-    })
-  } else if (process.argv[2] == "--update") {
-    if (fs.existsSync("_cache/cache.json") && cache) {
-      spawn('node', [helpers.localFile('update.js')], {
-        detached: true
-      });
-    } else {
-      helpers.rollbar.info("Another update is already in progress...");
-    }
-  } else {
-    helpers.rollbar.warn("Unsupported flag: " + process.argv[2]);
-  }
-} else {
-  const interval = 120000
-
-  /* Update the local cache using the external cache every 60 seconds */
-  setTimeout(async function localCache() {
-    const cachePath = helpers.localFile('_cache', 'cache.json')
-    const exists = await fs.pathExists(cachePath)
-
-    if (exists) {
-      try {
-        const data = await fs.readFile(cachePath)
-        cache = JSON.parse(data.toString());
-
-        setTimeout(localCache, interval)
-      } catch (err) {
-        helpers.rollbar.error(err)
-        setTimeout(localCache, interval)
-      }
-    } else {
-      helpers.rollbar.warn('cache.json doesnt exists')
-      setTimeout(localCache, interval)
-    }
-  }, interval);
-
-  getCache().then(startWebServer, (err) => helpers.rollbar.error(err))
-}
+getCache().then(startWebServer).catch((err) => helpers.rollbar.error(err))

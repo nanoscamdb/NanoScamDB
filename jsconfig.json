@@ -1,7 +1,4 @@
 {
-  "typeAcquisition": {
-    "enable": true
-  },
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
     "module": "commonjs",
@@ -16,6 +13,8 @@
     "strict": true,
     "strictFunctionTypes": false,
     "newLine": "LF",
+    "noImplicitReturns": true,
+    "strictNullChecks": false,
     "noUnusedParameters": true
   }
 }

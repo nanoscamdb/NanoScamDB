@@ -3,21 +3,41 @@
 const path = require('path')
 const fs = require('fs-extra')
 const Rollbar = require('rollbar')
-const rollbar = module.exports.rollbar = new Rollbar({
+const Promise = require('bluebird')
+const rollbar = module.exports.rollbar = !process.env['ROLLBAR_ACCESS_TOKEN'] ? {
+  critical: console.log.bind(console),
+  warn: console.log.bind(console),
+  info: console.log.bind(console),
+  log: console.log.bind(console),
+  error: console.error.bind(console),
+} : new Rollbar({
   accessToken: process.env.ROLLBAR_ACCESS_TOKEN,
   environment: process.env.NODE_ENV,
   captureUncaught: true,
   captureUnhandledRejections: true
 })
+
 const config = require('./config')
-let cache = Object.create(null)
-const { html, safeHtml } = require('common-tags')
+const cache = Object.create(null)
+
+const { html } = require('common-tags')
 
 /**
  * @param {string[]} paths
  */
 module.exports.localFile = function(...paths) {
   return path.join(__dirname, ...paths)
+}
+
+const urlReplace = /(^\w+:|^)\/\//
+
+/**
+ * Remove the protocol from url
+ *
+ * @param {string} url
+ */
+module.exports.removeProtocol = function(url) {
+  return url ? url.replace(urlReplace, '') : ''
 }
 
 /**
@@ -36,18 +56,21 @@ module.exports.baseUrl = function(path) {
   return `${config.base_url}${path}`
 }
 
+const mergeVars = {
+  base_url: config.base_url,
+  recaptcha_key: config.Recaptcha_Key
+}
+
 /**
  * @param {string} str
  * @param {{[index: string]: string}} vars
  */
 module.exports.replaceVars = function(str, vars) {
-  const keys = Object.keys(Object.assign({
-    base_url: config.base_url,
-    recaptcha_key: config.Recaptcha_Key
-  }, vars))
+  const merged = Object.assign({}, mergeVars, vars)
+  const keys = Object.keys(merged)
 
   return html`${keys.reduce((out, key) => {
-    return out.split(`{{ ${key} }}`).join(safeHtml`${vars[key]}`)
+    return out.split(`{{ ${key} }}`).join(`${merged[key]}`)
   }, str)}`
 }
 
@@ -57,7 +80,9 @@ module.exports.replaceVars = function(str, vars) {
  */
 module.exports.template = async function template(name, vars = {}) {
   if (name in cache) {
-    return Promise.resolve(module.exports.replaceVars(cache[name], vars))
+    return Promise.resolve(
+      module.exports.replaceVars(cache[name], vars)
+    )
   }
 
   try {

@@ -23,11 +23,6 @@
     url: 'https://nanowallet.io'
     featured: true
 -
-    id: 6
-    name: RaiWallet
-    url: 'https://raiwallet.com'
-    featured: true
--
     id: 7
     name: RaiTrade Reddit
     url: 'https://www.reddit.com/r/RaiTrade'
@@ -55,3 +50,7 @@
     id: 13
     name: Brainblocks Payment
     url: 'https://brainblocks.io'
+-
+    id: 14
+    name: Carteira Nano
+    url: 'https://carteiranano.com'

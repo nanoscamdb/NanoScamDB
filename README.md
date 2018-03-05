@@ -2,6 +2,15 @@
 
 *An open-source database to keep track of all the current nano (xrb) currency scams*
 
+This fork has:
+
+- Refactored code and security issues fixed (mainly unfiltered XSS)
+- Using current Node 8+ async/await
+- Rescans the files every new PR merged / github push
+- API (on `/api`) return was standardized
+
+Proudly hosted by [heroku](https://heroku.com)
+
 ## Usage
 
 Make sure you have both [Node.JS](https://nodejs.org/en/download/) and [Git](https://git-scm.com/downloads) installed.
@@ -36,11 +45,6 @@ Environment variables should be set for sensitive information:
 
 Generating should take a couple of minutes the first time or after a clean, but when `cache.json` is already present it should launch instantly.
 
-
-## Flags
-
-- `--clean` Clean up all the old files and folders
-- `--update` Manually update all content
 
 ## Contribute
 
