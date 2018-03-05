@@ -541,7 +541,7 @@ function startWebServer() {
   app.get('/rss/', async function (_req, res) { // Serve /rss/ (rss feed)
     const cache = await getCache()
 
-    res.send(await helpers.layout('rss', {
+    res.send(await helpers.template('rss', {
       'rss.entries': cache.scams.reduce(function (out, scam) {
         return `${out}
           <item>
